@@ -37,6 +37,7 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 0.5rem;
         margin-bottom: 0.8rem;
       }
 
@@ -94,6 +95,7 @@
       <h1>Snake Game</h1>
       <div class="hud">
         <p>Score: <span id="score">0</span></p>
+        <p>Lives: <span id="lives">3</span></p>
         <button id="restartButton" type="button">Restart</button>
       </div>
       <div class="controls">
@@ -111,13 +113,14 @@
         </select>
       </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
-      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. Eat the food, avoid walls and yourself.</p>
+      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. You have 3 lives and can revive after a collision.</p>
     </main>
 
     <script>
       const canvas = document.getElementById('gameCanvas');
       const ctx = canvas.getContext('2d');
       const scoreEl = document.getElementById('score');
+      const livesEl = document.getElementById('lives');
       const restartButton = document.getElementById('restartButton');
       const modeSelect = document.getElementById('modeSelect');
       const difficultySelect = document.getElementById('difficultySelect');
@@ -130,6 +133,7 @@
       let food = { x: 0, y: 0 };
       let walls = [];
       let score = 0;
+      let lives = 3;
       let running = true;
       let gameLoop = null;
 
@@ -210,7 +214,9 @@
         nextDirection = { x: 1, y: 0 };
         walls = getWallsForModeAndDifficulty();
         score = 0;
+        lives = 3;
         scoreEl.textContent = '0';
+        livesEl.textContent = lives.toString();
         running = true;
         placeFood();
         if (gameLoop) {
@@ -296,6 +302,21 @@
           walls.some((wall) => wall.x === head.x && wall.y === head.y) ||
           collisionCheck.some((segment) => segment.x === head.x && segment.y === head.y)
         ) {
+          lives -= 1;
+          livesEl.textContent = lives.toString();
+
+          if (lives > 0) {
+            snake = [
+              { x: 10, y: 10 },
+              { x: 9, y: 10 },
+              { x: 8, y: 10 }
+            ];
+            direction = { x: 1, y: 0 };
+            nextDirection = { x: 1, y: 0 };
+            placeFood();
+            return;
+          }
+
           running = false;
           return;
         }
