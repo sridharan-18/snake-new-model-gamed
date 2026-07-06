@@ -39,6 +39,7 @@
         align-items: center;
         gap: 0.5rem;
         margin-bottom: 0.8rem;
+        flex-wrap: wrap;
       }
 
       .controls {
@@ -88,6 +89,61 @@
         color: #cbd5e1;
         font-size: 0.95rem;
       }
+
+      .overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(2, 6, 23, 0.82);
+        display: grid;
+        place-items: center;
+        z-index: 10;
+      }
+
+      .overlay.hidden {
+        display: none;
+      }
+
+      .overlay-card {
+        width: min(90vw, 360px);
+        padding: 1.4rem;
+        border-radius: 18px;
+        background: #111827;
+        border: 1px solid #334155;
+        text-align: center;
+      }
+
+      .overlay-card h2 {
+        margin-top: 0;
+      }
+
+      .touch-controls {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        max-width: 220px;
+        margin: 0.8rem auto 0;
+      }
+
+      .touch-controls button {
+        padding: 0.7rem;
+        border-radius: 10px;
+      }
+
+      .touch-controls .up {
+        grid-column: 2;
+      }
+
+      .touch-controls .left {
+        grid-column: 1;
+      }
+
+      .touch-controls .right {
+        grid-column: 3;
+      }
+
+      .touch-controls .down {
+        grid-column: 2;
+      }
     </style>
   </head>
   <body>
@@ -96,6 +152,7 @@
       <div class="hud">
         <p>Score: <span id="score">0</span></p>
         <p>Lives: <span id="lives">3</span></p>
+        <p>High Score: <span id="highScore">0</span></p>
         <button id="restartButton" type="button">Restart</button>
       </div>
       <div class="controls">
@@ -113,17 +170,37 @@
         </select>
       </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
+      <div class="touch-controls">
+        <button class="up" data-direction="ArrowUp" type="button">▲</button>
+        <button class="left" data-direction="ArrowLeft" type="button">◀</button>
+        <button class="right" data-direction="ArrowRight" type="button">▶</button>
+        <button class="down" data-direction="ArrowDown" type="button">▼</button>
+      </div>
       <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. A red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
     </main>
+
+    <div id="overlay" class="overlay">
+      <div class="overlay-card">
+        <h2 id="overlayTitle">Snake Game</h2>
+        <p id="overlayMessage">Press Start to begin your adventure.</p>
+        <button id="overlayButton" type="button">Start Game</button>
+      </div>
+    </div>
 
     <script>
       const canvas = document.getElementById('gameCanvas');
       const ctx = canvas.getContext('2d');
       const scoreEl = document.getElementById('score');
       const livesEl = document.getElementById('lives');
+      const highScoreEl = document.getElementById('highScore');
       const restartButton = document.getElementById('restartButton');
       const modeSelect = document.getElementById('modeSelect');
       const difficultySelect = document.getElementById('difficultySelect');
+      const overlay = document.getElementById('overlay');
+      const overlayTitle = document.getElementById('overlayTitle');
+      const overlayMessage = document.getElementById('overlayMessage');
+      const overlayButton = document.getElementById('overlayButton');
+      const touchButtons = document.querySelectorAll('.touch-controls button');
 
       const tileSize = 20;
       const boardSize = canvas.width / tileSize;
@@ -136,11 +213,16 @@
       let walls = [];
       let score = 0;
       let lives = 3;
-      let running = true;
+      let running = false;
+      let paused = false;
       let gameLoop = null;
       let heart = null;
       let heartTimer = 0;
       let heartVisibleUntil = 0;
+      let gameStarted = false;
+      let gameSpeedMs = 140;
+      let highScore = Number(localStorage.getItem('snakeHighScore') || 0);
+      highScoreEl.textContent = highScore.toString();
 
       function getWallsForModeAndDifficulty() {
         const mode = modeSelect.value;
@@ -171,7 +253,6 @@
         if (mode === 'tunnel') {
           const walls = [];
           const tunnelOffset = difficulty === 'hard' ? 3 : difficulty === 'medium' ? 4 : 5;
-          const innerOffset = difficulty === 'hard' ? 1 : difficulty === 'medium' ? 2 : 3;
 
           for (let x = 0; x < boardSize; x += 1) {
             for (let y = 0; y < boardSize; y += 1) {
@@ -209,6 +290,33 @@
         return [];
       }
 
+      function updateHighScore() {
+        if (score > highScore) {
+          highScore = score;
+          localStorage.setItem('snakeHighScore', highScore.toString());
+          highScoreEl.textContent = highScore.toString();
+        }
+      }
+
+      function updateSpeed() {
+        gameSpeedMs = Math.max(70, 140 - score * 4);
+        if (gameLoop) {
+          clearInterval(gameLoop);
+        }
+        gameLoop = setInterval(loop, gameSpeedMs);
+      }
+
+      function showOverlay(title, message, buttonText) {
+        overlayTitle.textContent = title;
+        overlayMessage.textContent = message;
+        overlayButton.textContent = buttonText;
+        overlay.classList.remove('hidden');
+      }
+
+      function hideOverlay() {
+        overlay.classList.add('hidden');
+      }
+
       function resetGame() {
         snake = [
           { x: 10, y: 10 },
@@ -223,14 +331,14 @@
         scoreEl.textContent = '0';
         livesEl.textContent = lives.toString();
         running = true;
+        paused = false;
+        gameStarted = true;
         heart = null;
         heartTimer = 0;
         heartVisibleUntil = 0;
         placeFood();
-        if (gameLoop) {
-          cancelAnimationFrame(gameLoop);
-        }
-        gameLoop = requestAnimationFrame(loop);
+        updateSpeed();
+        hideOverlay();
       }
 
       function placeFood() {
@@ -334,8 +442,27 @@
         }
       }
 
+      function endGame() {
+        updateHighScore();
+        running = false;
+        gameStarted = false;
+        showOverlay('Game Over', `You scored ${score} points. Press Restart or Start to play again.`, 'Play Again');
+      }
+
+      function togglePause() {
+        if (!gameStarted || !running) {
+          return;
+        }
+        paused = !paused;
+        if (paused) {
+          showOverlay('Paused', 'Press Resume or P to continue.', 'Resume');
+        } else {
+          hideOverlay();
+        }
+      }
+
       function update() {
-        if (!running) {
+        if (!running || paused) {
           return;
         }
 
@@ -373,7 +500,7 @@
             return;
           }
 
-          running = false;
+          endGame();
           return;
         }
 
@@ -388,6 +515,7 @@
         if (isEating) {
           score += 1;
           scoreEl.textContent = score.toString();
+          updateSpeed();
           placeFood();
         } else {
           snake.pop();
@@ -405,9 +533,6 @@
       function loop() {
         update();
         render();
-        if (running) {
-          gameLoop = requestAnimationFrame(loop);
-        }
       }
 
       function setDirection(x, y) {
@@ -418,6 +543,18 @@
       }
 
       document.addEventListener('keydown', (event) => {
+        if (event.key === 'p' || event.key === 'P') {
+          event.preventDefault();
+          togglePause();
+          return;
+        }
+
+        if (!gameStarted && event.key === 'Enter') {
+          event.preventDefault();
+          resetGame();
+          return;
+        }
+
         switch (event.key) {
           case 'ArrowUp':
             event.preventDefault();
@@ -444,15 +581,48 @@
         resetGame();
       });
 
+      overlayButton.addEventListener('click', () => {
+        if (paused) {
+          paused = false;
+          hideOverlay();
+        } else {
+          resetGame();
+        }
+      });
+
       modeSelect.addEventListener('change', () => {
-        resetGame();
+        if (gameStarted) {
+          resetGame();
+        }
       });
 
       difficultySelect.addEventListener('change', () => {
-        resetGame();
+        if (gameStarted) {
+          resetGame();
+        }
       });
 
-      resetGame();
+      touchButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const directionKey = button.getAttribute('data-direction');
+          switch (directionKey) {
+            case 'ArrowUp':
+              setDirection(0, -1);
+              break;
+            case 'ArrowDown':
+              setDirection(0, 1);
+              break;
+            case 'ArrowLeft':
+              setDirection(-1, 0);
+              break;
+            case 'ArrowRight':
+              setDirection(1, 0);
+              break;
+          }
+        });
+      });
+
+      showOverlay('Snake Game', 'Press Start to begin your adventure.', 'Start Game');
     </script>
   </body>
 </html>
