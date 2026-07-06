@@ -113,7 +113,7 @@
         </select>
       </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
-      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. You have 3 lives and can revive after a collision.</p>
+      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. A red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
     </main>
 
     <script>
@@ -127,6 +127,8 @@
 
       const tileSize = 20;
       const boardSize = canvas.width / tileSize;
+      const heartSpawnInterval = 25000;
+      const heartVisibleDuration = 5000;
       let snake = [];
       let direction = { x: 1, y: 0 };
       let nextDirection = { x: 1, y: 0 };
@@ -136,6 +138,9 @@
       let lives = 3;
       let running = true;
       let gameLoop = null;
+      let heart = null;
+      let heartTimer = 0;
+      let heartVisibleUntil = 0;
 
       function getWallsForModeAndDifficulty() {
         const mode = modeSelect.value;
@@ -218,6 +223,9 @@
         scoreEl.textContent = '0';
         livesEl.textContent = lives.toString();
         running = true;
+        heart = null;
+        heartTimer = 0;
+        heartVisibleUntil = 0;
         placeFood();
         if (gameLoop) {
           cancelAnimationFrame(gameLoop);
@@ -281,10 +289,57 @@
         ctx.fill();
       }
 
+      function drawHeart() {
+        if (!heart) {
+          return;
+        }
+
+        const x = heart.x * tileSize + tileSize / 2;
+        const y = heart.y * tileSize + tileSize / 2;
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.moveTo(x, y + 4);
+        ctx.bezierCurveTo(x, y - 2, x - 6, y - 2, x - 6, y + 4);
+        ctx.bezierCurveTo(x - 6, y + 10, x - 2, y + 14, x, y + 18);
+        ctx.bezierCurveTo(x + 2, y + 14, x + 6, y + 10, x + 6, y + 4);
+        ctx.bezierCurveTo(x + 6, y - 2, x, y - 2, x, y + 4);
+        ctx.fill();
+      }
+
+      function updateHeart() {
+        const now = Date.now();
+        if (heartTimer === 0) {
+          heartTimer = now;
+        }
+
+        if (now - heartTimer >= heartSpawnInterval) {
+          heartTimer = now;
+          heartVisibleUntil = now + heartVisibleDuration;
+          let position;
+          do {
+            position = {
+              x: Math.floor(Math.random() * boardSize),
+              y: Math.floor(Math.random() * boardSize)
+            };
+          } while (
+            snake.some((segment) => segment.x === position.x && segment.y === position.y) ||
+            walls.some((wall) => wall.x === position.x && wall.y === position.y) ||
+            (food.x === position.x && food.y === position.y)
+          );
+          heart = position;
+        }
+
+        if (heart && now >= heartVisibleUntil) {
+          heart = null;
+        }
+      }
+
       function update() {
         if (!running) {
           return;
         }
+
+        updateHeart();
 
         direction = nextDirection;
         const head = { ...snake[0] };
@@ -292,6 +347,7 @@
         head.y += direction.y;
 
         const isEating = head.x === food.x && head.y === food.y;
+        const isGettingHeart = heart && head.x === heart.x && head.y === heart.y;
         const collisionCheck = isEating ? snake : snake.slice(0, -1);
 
         if (
@@ -323,6 +379,12 @@
 
         snake.unshift(head);
 
+        if (isGettingHeart) {
+          heart = null;
+          lives += 1;
+          livesEl.textContent = lives.toString();
+        }
+
         if (isEating) {
           score += 1;
           scoreEl.textContent = score.toString();
@@ -336,6 +398,7 @@
         drawBoard();
         drawWalls();
         drawFood();
+        drawHeart();
         drawSnake();
       }
 
