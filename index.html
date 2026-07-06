@@ -37,7 +37,25 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 1rem;
+        margin-bottom: 0.8rem;
+      }
+
+      .controls {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.8rem;
+        color: #cbd5e1;
+        font-size: 0.95rem;
+      }
+
+      select {
+        border: 1px solid #64748b;
+        border-radius: 8px;
+        padding: 0.35rem 0.6rem;
+        background: #111827;
+        color: #f8fafc;
       }
 
       button {
@@ -77,6 +95,14 @@
         <p>Score: <span id="score">0</span></p>
         <button id="restartButton" type="button">Restart</button>
       </div>
+      <div class="controls">
+        <label for="difficultySelect">Difficulty</label>
+        <select id="difficultySelect">
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+      </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
       <p class="instructions">Use the arrow keys to move. Eat the food, avoid walls and yourself.</p>
     </main>
@@ -86,6 +112,7 @@
       const ctx = canvas.getContext('2d');
       const scoreEl = document.getElementById('score');
       const restartButton = document.getElementById('restartButton');
+      const difficultySelect = document.getElementById('difficultySelect');
 
       const tileSize = 20;
       const boardSize = canvas.width / tileSize;
@@ -93,9 +120,28 @@
       let direction = { x: 1, y: 0 };
       let nextDirection = { x: 1, y: 0 };
       let food = { x: 0, y: 0 };
+      let walls = [];
       let score = 0;
       let running = true;
       let gameLoop = null;
+
+      function getWallsForDifficulty() {
+        switch (difficultySelect.value) {
+          case 'medium':
+            return [
+              { x: 9, y: 5 }, { x: 9, y: 6 }, { x: 9, y: 7 }, { x: 9, y: 8 },
+              { x: 10, y: 5 }, { x: 10, y: 6 }, { x: 10, y: 7 }, { x: 10, y: 8 }
+            ];
+          case 'hard':
+            return [
+              { x: 6, y: 4 }, { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 6, y: 7 }, { x: 6, y: 8 },
+              { x: 13, y: 4 }, { x: 13, y: 5 }, { x: 13, y: 6 }, { x: 13, y: 7 }, { x: 13, y: 8 },
+              { x: 8, y: 12 }, { x: 9, y: 12 }, { x: 10, y: 12 }, { x: 11, y: 12 }, { x: 12, y: 12 }
+            ];
+          default:
+            return [];
+        }
+      }
 
       function resetGame() {
         snake = [
@@ -105,6 +151,7 @@
         ];
         direction = { x: 1, y: 0 };
         nextDirection = { x: 1, y: 0 };
+        walls = getWallsForDifficulty();
         score = 0;
         scoreEl.textContent = '0';
         running = true;
@@ -122,7 +169,10 @@
             x: Math.floor(Math.random() * boardSize),
             y: Math.floor(Math.random() * boardSize)
           };
-        } while (snake.some((segment) => segment.x === position.x && segment.y === position.y));
+        } while (
+          snake.some((segment) => segment.x === position.x && segment.y === position.y) ||
+          walls.some((wall) => wall.x === position.x && wall.y === position.y)
+        );
 
         food = position;
       }
@@ -145,6 +195,13 @@
           ctx.lineTo(canvas.width, i * tileSize);
           ctx.stroke();
         }
+      }
+
+      function drawWalls() {
+        walls.forEach((wall) => {
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(wall.x * tileSize, wall.y * tileSize, tileSize - 1, tileSize - 1);
+        });
       }
 
       function drawSnake() {
@@ -179,6 +236,7 @@
           head.y < 0 ||
           head.x >= boardSize ||
           head.y >= boardSize ||
+          walls.some((wall) => wall.x === head.x && wall.y === head.y) ||
           collisionCheck.some((segment) => segment.x === head.x && segment.y === head.y)
         ) {
           running = false;
@@ -198,6 +256,7 @@
 
       function render() {
         drawBoard();
+        drawWalls();
         drawFood();
         drawSnake();
       }
@@ -241,6 +300,10 @@
       });
 
       restartButton.addEventListener('click', () => {
+        resetGame();
+      });
+
+      difficultySelect.addEventListener('change', () => {
         resetGame();
       });
 
