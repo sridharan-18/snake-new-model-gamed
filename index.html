@@ -44,7 +44,8 @@
         display: flex;
         justify-content: center;
         align-items: center;
-        gap: 0.5rem;
+        flex-wrap: wrap;
+        gap: 0.6rem;
         margin-bottom: 0.8rem;
         color: #cbd5e1;
         font-size: 0.95rem;
@@ -96,6 +97,12 @@
         <button id="restartButton" type="button">Restart</button>
       </div>
       <div class="controls">
+        <label for="modeSelect">Mode</label>
+        <select id="modeSelect">
+          <option value="classic">Classic</option>
+          <option value="barrier">Barrier</option>
+          <option value="tunnel">Tunnel</option>
+        </select>
         <label for="difficultySelect">Difficulty</label>
         <select id="difficultySelect">
           <option value="easy">Easy</option>
@@ -104,7 +111,7 @@
         </select>
       </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
-      <p class="instructions">Use the arrow keys to move. Eat the food, avoid walls and yourself.</p>
+      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. Eat the food, avoid walls and yourself.</p>
     </main>
 
     <script>
@@ -112,6 +119,7 @@
       const ctx = canvas.getContext('2d');
       const scoreEl = document.getElementById('score');
       const restartButton = document.getElementById('restartButton');
+      const modeSelect = document.getElementById('modeSelect');
       const difficultySelect = document.getElementById('difficultySelect');
 
       const tileSize = 20;
@@ -125,22 +133,71 @@
       let running = true;
       let gameLoop = null;
 
-      function getWallsForDifficulty() {
-        switch (difficultySelect.value) {
-          case 'medium':
-            return [
-              { x: 9, y: 5 }, { x: 9, y: 6 }, { x: 9, y: 7 }, { x: 9, y: 8 },
-              { x: 10, y: 5 }, { x: 10, y: 6 }, { x: 10, y: 7 }, { x: 10, y: 8 }
-            ];
-          case 'hard':
-            return [
-              { x: 6, y: 4 }, { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 6, y: 7 }, { x: 6, y: 8 },
-              { x: 13, y: 4 }, { x: 13, y: 5 }, { x: 13, y: 6 }, { x: 13, y: 7 }, { x: 13, y: 8 },
-              { x: 8, y: 12 }, { x: 9, y: 12 }, { x: 10, y: 12 }, { x: 11, y: 12 }, { x: 12, y: 12 }
-            ];
-          default:
-            return [];
+      function getWallsForModeAndDifficulty() {
+        const mode = modeSelect.value;
+        const difficulty = difficultySelect.value;
+
+        if (mode === 'classic') {
+          return [];
         }
+
+        if (mode === 'barrier') {
+          switch (difficulty) {
+            case 'medium':
+              return [
+                { x: 9, y: 5 }, { x: 9, y: 6 }, { x: 9, y: 7 }, { x: 9, y: 8 },
+                { x: 10, y: 5 }, { x: 10, y: 6 }, { x: 10, y: 7 }, { x: 10, y: 8 }
+              ];
+            case 'hard':
+              return [
+                { x: 6, y: 4 }, { x: 6, y: 5 }, { x: 6, y: 6 }, { x: 6, y: 7 }, { x: 6, y: 8 },
+                { x: 13, y: 4 }, { x: 13, y: 5 }, { x: 13, y: 6 }, { x: 13, y: 7 }, { x: 13, y: 8 },
+                { x: 8, y: 12 }, { x: 9, y: 12 }, { x: 10, y: 12 }, { x: 11, y: 12 }, { x: 12, y: 12 }
+              ];
+            default:
+              return [];
+          }
+        }
+
+        if (mode === 'tunnel') {
+          const walls = [];
+          const tunnelOffset = difficulty === 'hard' ? 3 : difficulty === 'medium' ? 4 : 5;
+          const innerOffset = difficulty === 'hard' ? 1 : difficulty === 'medium' ? 2 : 3;
+
+          for (let x = 0; x < boardSize; x += 1) {
+            for (let y = 0; y < boardSize; y += 1) {
+              const isOuterWall =
+                (x === tunnelOffset && y >= tunnelOffset && y <= boardSize - tunnelOffset - 1) ||
+                (x === boardSize - tunnelOffset - 1 && y >= tunnelOffset && y <= boardSize - tunnelOffset - 1) ||
+                (y === tunnelOffset && x >= tunnelOffset && x <= boardSize - tunnelOffset - 1) ||
+                (y === boardSize - tunnelOffset - 1 && x >= tunnelOffset && x <= boardSize - tunnelOffset - 1);
+
+              const isInnerBlock =
+                difficulty === 'hard' &&
+                ((x === 10 && y >= 6 && y <= 12) || (y === 10 && x >= 6 && x <= 14));
+
+              if (isOuterWall || isInnerBlock) {
+                walls.push({ x, y });
+              }
+            }
+          }
+
+          if (difficulty === 'medium') {
+            for (let y = 6; y <= 12; y += 1) {
+              walls.push({ x: 10, y });
+            }
+          }
+
+          if (difficulty === 'hard') {
+            for (let x = 6; x <= 13; x += 1) {
+              walls.push({ x, y: 10 });
+            }
+          }
+
+          return walls;
+        }
+
+        return [];
       }
 
       function resetGame() {
@@ -151,7 +208,7 @@
         ];
         direction = { x: 1, y: 0 };
         nextDirection = { x: 1, y: 0 };
-        walls = getWallsForDifficulty();
+        walls = getWallsForModeAndDifficulty();
         score = 0;
         scoreEl.textContent = '0';
         running = true;
@@ -300,6 +357,10 @@
       });
 
       restartButton.addEventListener('click', () => {
+        resetGame();
+      });
+
+      modeSelect.addEventListener('change', () => {
         resetGame();
       });
 
