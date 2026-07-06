@@ -176,7 +176,7 @@
         <button class="right" data-direction="ArrowRight" type="button">▶</button>
         <button class="down" data-direction="ArrowDown" type="button">▼</button>
       </div>
-      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. A red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
+      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. The snake wraps around the edges and a red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
     </main>
 
     <div id="overlay" class="overlay">
@@ -473,17 +473,26 @@
         head.x += direction.x;
         head.y += direction.y;
 
-        const isEating = head.x === food.x && head.y === food.y;
-        const isGettingHeart = heart && head.x === heart.x && head.y === heart.y;
+        const wrappedHead = { ...head };
+        if (wrappedHead.x < 0) {
+          wrappedHead.x = boardSize - 1;
+        } else if (wrappedHead.x >= boardSize) {
+          wrappedHead.x = 0;
+        }
+
+        if (wrappedHead.y < 0) {
+          wrappedHead.y = boardSize - 1;
+        } else if (wrappedHead.y >= boardSize) {
+          wrappedHead.y = 0;
+        }
+
+        const isEating = wrappedHead.x === food.x && wrappedHead.y === food.y;
+        const isGettingHeart = heart && wrappedHead.x === heart.x && wrappedHead.y === heart.y;
         const collisionCheck = isEating ? snake : snake.slice(0, -1);
 
         if (
-          head.x < 0 ||
-          head.y < 0 ||
-          head.x >= boardSize ||
-          head.y >= boardSize ||
-          walls.some((wall) => wall.x === head.x && wall.y === head.y) ||
-          collisionCheck.some((segment) => segment.x === head.x && segment.y === head.y)
+          walls.some((wall) => wall.x === wrappedHead.x && wall.y === wrappedHead.y) ||
+          collisionCheck.some((segment) => segment.x === wrappedHead.x && segment.y === wrappedHead.y)
         ) {
           lives -= 1;
           livesEl.textContent = lives.toString();
@@ -504,7 +513,7 @@
           return;
         }
 
-        snake.unshift(head);
+        snake.unshift(wrappedHead);
 
         if (isGettingHeart) {
           heart = null;
