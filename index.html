@@ -90,6 +90,12 @@
         background: #16a34a;
       }
 
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.65;
+        background: #64748b;
+      }
+
       canvas {
         width: 100%;
         max-width: 400px;
@@ -196,7 +202,7 @@
         <button class="right" data-direction="ArrowRight" type="button">▶</button>
         <button class="down" data-direction="ArrowDown" type="button">▼</button>
       </div>
-      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
+      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life. Powers recharge after a short cooldown.</p>
     </main>
 
     <div id="overlay" class="overlay">
@@ -251,6 +257,8 @@
       let shieldActive = false;
       let ghostActive = false;
       let scoreBoostActive = false;
+      let powerCooldownUntil = 0;
+      const powerCooldownMs = 8000;
       highScoreEl.textContent = highScore.toString();
 
       const superpowerDefinitions = {
@@ -335,9 +343,19 @@
       }
 
       function syncPowerUI() {
+        const cooldownRemaining = Math.max(0, powerCooldownUntil - Date.now());
+
+        if (cooldownRemaining > 0) {
+          powerStatusEl.textContent = `Power: cooldown ${Math.ceil(cooldownRemaining / 1000)}s`;
+          powerButton.textContent = 'Charging...';
+          powerButton.disabled = true;
+          return;
+        }
+
         if (activePower) {
           powerStatusEl.textContent = `Power: ${activePower.label}`;
           powerButton.textContent = `Use ${activePower.label}`;
+          powerButton.disabled = false;
           return;
         }
 
@@ -345,11 +363,13 @@
           const nextPower = unlockedPowers[unlockedPowers.length - 1];
           powerStatusEl.textContent = `Power: ${nextPower.label}`;
           powerButton.textContent = `Use ${nextPower.label}`;
+          powerButton.disabled = false;
           return;
         }
 
         powerStatusEl.textContent = 'Power: none';
         powerButton.textContent = 'Use Power';
+        powerButton.disabled = true;
       }
 
       function updateLevel() {
@@ -371,7 +391,8 @@
       }
 
       function useSuperpower() {
-        if (!activePower) {
+        if (!activePower || powerCooldownUntil > Date.now()) {
+          syncPowerUI();
           return;
         }
 
@@ -408,6 +429,7 @@
           unlockedPowers.splice(consumedIndex, 1);
         }
         activePower = unlockedPowers[unlockedPowers.length - 1] || null;
+        powerCooldownUntil = Date.now() + powerCooldownMs;
         syncPowerUI();
       }
 
@@ -456,6 +478,7 @@
         shieldActive = false;
         ghostActive = false;
         scoreBoostActive = false;
+        powerCooldownUntil = 0;
         syncPowerUI();
         placeFood();
         updateSpeed();
@@ -502,6 +525,23 @@
           ctx.fillStyle = '#64748b';
           ctx.fillRect(wall.x * tileSize, wall.y * tileSize, tileSize - 1, tileSize - 1);
         });
+      }
+
+      function drawPowerAura() {
+        if (!snake.length || (!shieldActive && !ghostActive && !scoreBoostActive)) {
+          return;
+        }
+
+        const head = snake[0];
+        const pulse = 0.5 + 0.5 * Math.sin(Date.now() / 180);
+        const radius = 10 + pulse * 3;
+        const color = shieldActive ? '#38bdf8' : ghostActive ? '#a78bfa' : '#fde68a';
+
+        ctx.beginPath();
+        ctx.arc(head.x * tileSize + tileSize / 2, head.y * tileSize + tileSize / 2, radius, 0, Math.PI * 2);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2 + pulse;
+        ctx.stroke();
       }
 
       function drawSnake() {
@@ -665,6 +705,7 @@
         drawWalls();
         drawFood();
         drawHeart();
+        drawPowerAura();
         drawSnake();
       }
 
