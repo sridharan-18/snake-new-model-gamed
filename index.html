@@ -15,7 +15,9 @@
         min-height: 100vh;
         display: grid;
         place-items: center;
-        background: linear-gradient(135deg, #0f172a, #111827);
+        background:
+          linear-gradient(135deg, rgba(6, 78, 59, 0.55), rgba(15, 23, 42, 0.78)),
+          url('https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80') center/cover no-repeat;
         color: #f8fafc;
       }
 
@@ -23,9 +25,11 @@
         width: min(92vw, 460px);
         padding: 1.25rem;
         border-radius: 18px;
-        background: rgba(15, 23, 42, 0.95);
+        background: rgba(15, 23, 42, 0.78);
+        border: 1px solid rgba(255, 255, 255, 0.12);
         box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
         text-align: center;
+        backdrop-filter: blur(8px);
       }
 
       h1 {
