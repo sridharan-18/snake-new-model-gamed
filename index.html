@@ -42,6 +42,21 @@
         flex-wrap: wrap;
       }
 
+      .power-panel {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.8rem;
+        color: #f8fafc;
+      }
+
+      .power-panel span {
+        font-weight: 600;
+        color: #fde68a;
+      }
+
       .controls {
         display: flex;
         justify-content: center;
@@ -151,9 +166,14 @@
       <h1>Snake Game</h1>
       <div class="hud">
         <p>Score: <span id="score">0</span></p>
+        <p>Level: <span id="level">1</span></p>
         <p>Lives: <span id="lives">3</span></p>
         <p>High Score: <span id="highScore">0</span></p>
         <button id="restartButton" type="button">Restart</button>
+      </div>
+      <div class="power-panel">
+        <span id="powerStatus">Power: none</span>
+        <button id="powerButton" type="button">Use Power</button>
       </div>
       <div class="controls">
         <label for="modeSelect">Mode</label>
@@ -176,7 +196,7 @@
         <button class="right" data-direction="ArrowRight" type="button">▶</button>
         <button class="down" data-direction="ArrowDown" type="button">▼</button>
       </div>
-      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. The snake wraps around the edges and a red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
+      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life.</p>
     </main>
 
     <div id="overlay" class="overlay">
@@ -191,9 +211,12 @@
       const canvas = document.getElementById('gameCanvas');
       const ctx = canvas.getContext('2d');
       const scoreEl = document.getElementById('score');
+      const levelEl = document.getElementById('level');
       const livesEl = document.getElementById('lives');
       const highScoreEl = document.getElementById('highScore');
       const restartButton = document.getElementById('restartButton');
+      const powerStatusEl = document.getElementById('powerStatus');
+      const powerButton = document.getElementById('powerButton');
       const modeSelect = document.getElementById('modeSelect');
       const difficultySelect = document.getElementById('difficultySelect');
       const overlay = document.getElementById('overlay');
@@ -212,6 +235,7 @@
       let food = { x: 0, y: 0 };
       let walls = [];
       let score = 0;
+      let level = 1;
       let lives = 3;
       let running = false;
       let paused = false;
@@ -222,7 +246,19 @@
       let gameStarted = false;
       let gameSpeedMs = 140;
       let highScore = Number(localStorage.getItem('snakeHighScore') || 0);
+      let unlockedPowers = [];
+      let activePower = null;
+      let shieldActive = false;
+      let ghostActive = false;
+      let scoreBoostActive = false;
       highScoreEl.textContent = highScore.toString();
+
+      const superpowerDefinitions = {
+        1: { key: 'shield', label: 'Shield', description: 'Absorb the next crash' },
+        2: { key: 'warp', label: 'Warp', description: 'Teleport to a safe cell' },
+        3: { key: 'surge', label: 'Score Surge', description: 'Next food is worth 2 points' },
+        4: { key: 'ghost', label: 'Ghost', description: 'Pass through one collision' }
+      };
 
       function getWallsForModeAndDifficulty() {
         const mode = modeSelect.value;
@@ -298,6 +334,83 @@
         }
       }
 
+      function syncPowerUI() {
+        if (activePower) {
+          powerStatusEl.textContent = `Power: ${activePower.label}`;
+          powerButton.textContent = `Use ${activePower.label}`;
+          return;
+        }
+
+        if (unlockedPowers.length > 0) {
+          const nextPower = unlockedPowers[unlockedPowers.length - 1];
+          powerStatusEl.textContent = `Power: ${nextPower.label}`;
+          powerButton.textContent = `Use ${nextPower.label}`;
+          return;
+        }
+
+        powerStatusEl.textContent = 'Power: none';
+        powerButton.textContent = 'Use Power';
+      }
+
+      function updateLevel() {
+        const nextLevel = Math.floor(score / 5) + 1;
+        if (nextLevel === level) {
+          return;
+        }
+
+        level = nextLevel;
+        levelEl.textContent = level.toString();
+        const newPower = superpowerDefinitions[level];
+
+        if (newPower && !unlockedPowers.some((power) => power.key === newPower.key)) {
+          unlockedPowers.push(newPower);
+          activePower = newPower;
+        }
+
+        syncPowerUI();
+      }
+
+      function useSuperpower() {
+        if (!activePower) {
+          return;
+        }
+
+        switch (activePower.key) {
+          case 'shield':
+            shieldActive = true;
+            break;
+          case 'warp':
+            let safePosition;
+            do {
+              safePosition = {
+                x: Math.floor(Math.random() * boardSize),
+                y: Math.floor(Math.random() * boardSize)
+              };
+            } while (
+              snake.some((segment) => segment.x === safePosition.x && segment.y === safePosition.y) ||
+              walls.some((wall) => wall.x === safePosition.x && wall.y === safePosition.y) ||
+              (food.x === safePosition.x && food.y === safePosition.y)
+            );
+            snake[0] = safePosition;
+            break;
+          case 'surge':
+            scoreBoostActive = true;
+            break;
+          case 'ghost':
+            ghostActive = true;
+            break;
+          default:
+            break;
+        }
+
+        const consumedIndex = unlockedPowers.findIndex((power) => power.key === activePower.key);
+        if (consumedIndex >= 0) {
+          unlockedPowers.splice(consumedIndex, 1);
+        }
+        activePower = unlockedPowers[unlockedPowers.length - 1] || null;
+        syncPowerUI();
+      }
+
       function updateSpeed() {
         gameSpeedMs = Math.max(70, 140 - score * 4);
         if (gameLoop) {
@@ -327,8 +440,10 @@
         nextDirection = { x: 1, y: 0 };
         walls = getWallsForModeAndDifficulty();
         score = 0;
+        level = 1;
         lives = 3;
         scoreEl.textContent = '0';
+        levelEl.textContent = '1';
         livesEl.textContent = lives.toString();
         running = true;
         paused = false;
@@ -336,6 +451,12 @@
         heart = null;
         heartTimer = 0;
         heartVisibleUntil = 0;
+        unlockedPowers = [];
+        activePower = null;
+        shieldActive = false;
+        ghostActive = false;
+        scoreBoostActive = false;
+        syncPowerUI();
         placeFood();
         updateSpeed();
         hideOverlay();
@@ -490,10 +611,11 @@
         const isGettingHeart = heart && wrappedHead.x === heart.x && wrappedHead.y === heart.y;
         const collisionCheck = isEating ? snake : snake.slice(0, -1);
 
-        if (
+        const collisionDetected =
           walls.some((wall) => wall.x === wrappedHead.x && wall.y === wrappedHead.y) ||
-          collisionCheck.some((segment) => segment.x === wrappedHead.x && segment.y === wrappedHead.y)
-        ) {
+          collisionCheck.some((segment) => segment.x === wrappedHead.x && segment.y === wrappedHead.y);
+
+        if (collisionDetected && !shieldActive && !ghostActive) {
           lives -= 1;
           livesEl.textContent = lives.toString();
 
@@ -521,9 +643,16 @@
           livesEl.textContent = lives.toString();
         }
 
+        if (collisionDetected && (shieldActive || ghostActive)) {
+          shieldActive = false;
+          ghostActive = false;
+        }
+
         if (isEating) {
-          score += 1;
+          score += scoreBoostActive ? 2 : 1;
+          scoreBoostActive = false;
           scoreEl.textContent = score.toString();
+          updateLevel();
           updateSpeed();
           placeFood();
         } else {
@@ -552,6 +681,12 @@
       }
 
       document.addEventListener('keydown', (event) => {
+        if (event.code === 'Space') {
+          event.preventDefault();
+          useSuperpower();
+          return;
+        }
+
         if (event.key === 'p' || event.key === 'P') {
           event.preventDefault();
           togglePause();
@@ -588,6 +723,10 @@
 
       restartButton.addEventListener('click', () => {
         resetGame();
+      });
+
+      powerButton.addEventListener('click', () => {
+        useSuperpower();
       });
 
       overlayButton.addEventListener('click', () => {
