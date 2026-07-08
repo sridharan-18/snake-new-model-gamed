@@ -106,6 +106,19 @@
         font-size: 0.95rem;
       }
 
+      .online-controls {
+        margin-top: 0.45rem;
+      }
+
+      .online-controls input {
+        border: 1px solid #64748b;
+        border-radius: 8px;
+        padding: 0.35rem 0.6rem;
+        background: #111827;
+        color: #f8fafc;
+        min-width: 110px;
+      }
+
       select {
         border: 1px solid #64748b;
         border-radius: 8px;
@@ -236,7 +249,14 @@
         <select id="playModeSelect">
           <option value="normal">Normal</option>
           <option value="multiplayer">Multiplayer</option>
+          <option value="online">Online</option>
         </select>
+      </div>
+      <div class="controls online-controls">
+        <label for="roomCodeInput">Room</label>
+        <input id="roomCodeInput" type="text" placeholder="Enter code" />
+        <button id="createRoomButton" type="button">Create</button>
+        <button id="joinRoomButton" type="button">Join</button>
       </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
       <div class="touch-controls">
@@ -245,7 +265,7 @@
         <button class="right" data-direction="ArrowRight" type="button">▶</button>
         <button class="down" data-direction="ArrowDown" type="button">▼</button>
       </div>
-      <p class="instructions">Choose an arena, difficulty, and play mode. In normal mode, use the arrow keys. In multiplayer, Player 1 uses the arrow keys and Player 2 uses WASD. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life. Powers recharge after a short cooldown.</p>
+      <p class="instructions">Choose an arena, difficulty, and play mode. In normal mode, use the arrow keys. In multiplayer, Player 1 uses the arrow keys and Player 2 uses WASD. In online mode, create or join a room code to connect with another tab or browser window. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life. Powers recharge after a short cooldown.</p>
     </main>
 
     <div id="overlay" class="overlay">
@@ -269,6 +289,9 @@
       const modeSelect = document.getElementById('modeSelect');
       const difficultySelect = document.getElementById('difficultySelect');
       const playModeSelect = document.getElementById('playModeSelect');
+      const roomCodeInput = document.getElementById('roomCodeInput');
+      const createRoomButton = document.getElementById('createRoomButton');
+      const joinRoomButton = document.getElementById('joinRoomButton');
       const overlay = document.getElementById('overlay');
       const overlayTitle = document.getElementById('overlayTitle');
       const overlayMessage = document.getElementById('overlayMessage');
@@ -307,6 +330,11 @@
       let scoreBoostActive = false;
       let powerCooldownUntil = 0;
       const powerCooldownMs = 8000;
+      const onlineChannel = new BroadcastChannel('snake-online-room');
+      let onlineRoomCode = '';
+      let onlinePlayerId = '';
+      let onlinePeerConnected = false;
+      let onlineIsHost = false;
       highScoreEl.textContent = highScore.toString();
 
       const superpowerDefinitions = {
@@ -489,6 +517,60 @@
         gameLoop = setInterval(loop, gameSpeedMs);
       }
 
+      function generateRoomCode() {
+        return Math.random().toString(36).slice(2, 6).toUpperCase();
+      }
+
+      function createOnlineRoom() {
+        onlineRoomCode = roomCodeInput.value.trim() || generateRoomCode();
+        roomCodeInput.value = onlineRoomCode;
+        onlineIsHost = true;
+        onlinePlayerId = 'host';
+        onlinePeerConnected = false;
+        onlineChannel.postMessage({ type: 'room-created', roomCode: onlineRoomCode });
+        resetGame();
+      }
+
+      function joinOnlineRoom() {
+        onlineRoomCode = roomCodeInput.value.trim();
+        if (!onlineRoomCode) {
+          return;
+        }
+        onlineIsHost = false;
+        onlinePlayerId = 'guest';
+        onlinePeerConnected = false;
+        onlineChannel.postMessage({ type: 'room-joined', roomCode: onlineRoomCode });
+        resetGame();
+      }
+
+      function syncOnlineState() {
+        if (playModeSelect.value !== 'online' || !onlineRoomCode) {
+          return;
+        }
+
+        onlineChannel.postMessage({
+          type: 'state-sync',
+          roomCode: onlineRoomCode,
+          payload: {
+            playerId: onlinePlayerId,
+            snake: snake,
+            snakeTwo,
+            direction: nextDirection,
+            directionTwo: nextDirectionTwo,
+            score,
+            scoreTwo,
+            food,
+            walls,
+            heart,
+            lives,
+            level,
+            running,
+            paused,
+            activePower: activePower ? activePower.key : null
+          }
+        });
+      }
+
       function showOverlay(title, message, buttonText) {
         overlayTitle.textContent = title;
         overlayMessage.textContent = message;
@@ -535,6 +617,9 @@
         ghostActive = false;
         scoreBoostActive = false;
         powerCooldownUntil = 0;
+        if (playModeSelect.value === 'online') {
+          onlinePeerConnected = false;
+        }
         syncPowerUI();
         placeFood();
         updateSpeed();
@@ -765,6 +850,59 @@
           snake.pop();
         }
 
+        if (playModeSelect.value === 'online' && onlinePeerConnected && snakeTwo.length > 0) {
+          directionTwo = nextDirectionTwo;
+          const headTwo = { ...snakeTwo[0] };
+          headTwo.x += directionTwo.x;
+          headTwo.y += directionTwo.y;
+
+          const wrappedHeadTwo = { ...headTwo };
+          if (wrappedHeadTwo.x < 0) {
+            wrappedHeadTwo.x = boardSize - 1;
+          } else if (wrappedHeadTwo.x >= boardSize) {
+            wrappedHeadTwo.x = 0;
+          }
+
+          if (wrappedHeadTwo.y < 0) {
+            wrappedHeadTwo.y = boardSize - 1;
+          } else if (wrappedHeadTwo.y >= boardSize) {
+            wrappedHeadTwo.y = 0;
+          }
+
+          const isEatingTwo = wrappedHeadTwo.x === food.x && wrappedHeadTwo.y === food.y;
+          const collisionCheckTwo = isEatingTwo ? snakeTwo : snakeTwo.slice(0, -1);
+          const collisionDetectedTwo =
+            walls.some((wall) => wall.x === wrappedHeadTwo.x && wall.y === wrappedHeadTwo.y) ||
+            collisionCheckTwo.some((segment) => segment.x === wrappedHeadTwo.x && segment.y === wrappedHeadTwo.y) ||
+            snake.some((segment) => segment.x === wrappedHeadTwo.x && segment.y === wrappedHeadTwo.y);
+
+          if (collisionDetectedTwo) {
+            scoreTwo += 1;
+            snakeTwo = [
+              { x: 14, y: 14 },
+              { x: 15, y: 14 },
+              { x: 16, y: 14 }
+            ];
+            directionTwo = { x: 0, y: -1 };
+            nextDirectionTwo = { x: 0, y: -1 };
+            placeFood();
+            return;
+          }
+
+          snakeTwo.unshift(wrappedHeadTwo);
+
+          if (isEatingTwo) {
+            scoreTwo += 1;
+            placeFood();
+          } else {
+            snakeTwo.pop();
+          }
+        }
+
+        if (playModeSelect.value === 'online' && !onlinePeerConnected && onlineIsHost) {
+          syncOnlineState();
+        }
+
         if (isMultiplayer && snakeTwo.length > 0) {
           directionTwo = nextDirectionTwo;
           const headTwo = { ...snakeTwo[0] };
@@ -843,6 +981,40 @@
         nextDirectionTwo = { x, y };
       }
 
+      onlineChannel.onmessage = (event) => {
+        const { type, roomCode, payload } = event.data || {};
+        if (!roomCode || roomCode !== onlineRoomCode) {
+          return;
+        }
+
+        if (type === 'room-created') {
+          onlinePeerConnected = true;
+          return;
+        }
+
+        if (type === 'room-joined') {
+          onlinePeerConnected = true;
+          return;
+        }
+
+        if (type === 'state-sync' && payload && payload.playerId !== onlinePlayerId) {
+          onlinePeerConnected = true;
+          snakeTwo = payload.snakeTwo || [];
+          nextDirectionTwo = payload.directionTwo || nextDirectionTwo;
+          scoreTwo = payload.scoreTwo || 0;
+          food = payload.food || food;
+          walls = payload.walls || walls;
+          heart = payload.heart || heart;
+          lives = payload.lives || lives;
+          level = payload.level || level;
+          running = payload.running ?? running;
+          paused = payload.paused ?? paused;
+          if (payload.activePower) {
+            activePower = superpowerDefinitions[Object.keys(superpowerDefinitions).find((key) => superpowerDefinitions[key].key === payload.activePower)] || null;
+          }
+        }
+      };
+
       document.addEventListener('keydown', (event) => {
         if (event.code === 'Space') {
           event.preventDefault();
@@ -859,6 +1031,53 @@
         if (!gameStarted && event.key === 'Enter') {
           event.preventDefault();
           resetGame();
+          return;
+        }
+
+        if (playModeSelect.value === 'online') {
+          switch (event.key) {
+            case 'ArrowUp':
+              event.preventDefault();
+              setDirection(0, -1);
+              break;
+            case 'ArrowDown':
+              event.preventDefault();
+              setDirection(0, 1);
+              break;
+            case 'ArrowLeft':
+              event.preventDefault();
+              setDirection(-1, 0);
+              break;
+            case 'ArrowRight':
+              event.preventDefault();
+              setDirection(1, 0);
+              break;
+            case 'w':
+            case 'W':
+              event.preventDefault();
+              setDirectionTwo(0, -1);
+              break;
+            case 's':
+            case 'S':
+              event.preventDefault();
+              setDirectionTwo(0, 1);
+              break;
+            case 'a':
+            case 'A':
+              event.preventDefault();
+              setDirectionTwo(-1, 0);
+              break;
+            case 'd':
+            case 'D':
+              event.preventDefault();
+              setDirectionTwo(1, 0);
+              break;
+            default:
+              break;
+          }
+          if (playModeSelect.value === 'online') {
+            syncOnlineState();
+          }
           return;
         }
 
