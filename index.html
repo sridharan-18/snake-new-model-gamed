@@ -15,10 +15,44 @@
         min-height: 100vh;
         display: grid;
         place-items: center;
+        position: relative;
+        overflow: hidden;
         background:
-          linear-gradient(135deg, rgba(6, 78, 59, 0.55), rgba(15, 23, 42, 0.78)),
+          linear-gradient(135deg, rgba(19, 78, 74, 0.65), rgba(15, 23, 42, 0.82)),
           url('https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=1600&q=80') center/cover no-repeat;
         color: #f8fafc;
+      }
+
+      body::before,
+      body::after {
+        content: '';
+        position: fixed;
+        inset: -20%;
+        z-index: -1;
+        filter: blur(42px);
+        opacity: 0.35;
+        animation: drift 14s ease-in-out infinite alternate;
+      }
+
+      body::before {
+        background: radial-gradient(circle at 20% 25%, #f59e0b 0, transparent 32%),
+          radial-gradient(circle at 75% 15%, #34d399 0, transparent 28%),
+          radial-gradient(circle at 50% 90%, #38bdf8 0, transparent 34%);
+      }
+
+      body::after {
+        animation-duration: 18s;
+        background: radial-gradient(circle at 10% 85%, #fb7185 0, transparent 25%),
+          radial-gradient(circle at 90% 35%, #a78bfa 0, transparent 30%);
+      }
+
+      @keyframes drift {
+        from {
+          transform: translate3d(-3%, -2%, 0) scale(1);
+        }
+        to {
+          transform: translate3d(3%, 2%, 0) scale(1.05);
+        }
       }
 
       .game-shell {
@@ -186,7 +220,7 @@
         <button id="powerButton" type="button">Use Power</button>
       </div>
       <div class="controls">
-        <label for="modeSelect">Mode</label>
+        <label for="modeSelect">Arena</label>
         <select id="modeSelect">
           <option value="classic">Classic</option>
           <option value="barrier">Barrier</option>
@@ -198,6 +232,11 @@
           <option value="medium">Medium</option>
           <option value="hard">Hard</option>
         </select>
+        <label for="playModeSelect">Play Mode</label>
+        <select id="playModeSelect">
+          <option value="normal">Normal</option>
+          <option value="multiplayer">Multiplayer</option>
+        </select>
       </div>
       <canvas id="gameCanvas" width="400" height="400"></canvas>
       <div class="touch-controls">
@@ -206,7 +245,7 @@
         <button class="right" data-direction="ArrowRight" type="button">▶</button>
         <button class="down" data-direction="ArrowDown" type="button">▼</button>
       </div>
-      <p class="instructions">Choose a mode and difficulty, then use the arrow keys to move. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life. Powers recharge after a short cooldown.</p>
+      <p class="instructions">Choose an arena, difficulty, and play mode. In normal mode, use the arrow keys. In multiplayer, Player 1 uses the arrow keys and Player 2 uses WASD. Every 5 points raises your level and unlocks a superpower. Press Space or tap the power button to activate it, and a red heart appears every 25 seconds for 5 seconds to grant an extra life. Powers recharge after a short cooldown.</p>
     </main>
 
     <div id="overlay" class="overlay">
@@ -229,6 +268,7 @@
       const powerButton = document.getElementById('powerButton');
       const modeSelect = document.getElementById('modeSelect');
       const difficultySelect = document.getElementById('difficultySelect');
+      const playModeSelect = document.getElementById('playModeSelect');
       const overlay = document.getElementById('overlay');
       const overlayTitle = document.getElementById('overlayTitle');
       const overlayMessage = document.getElementById('overlayMessage');
@@ -240,11 +280,15 @@
       const heartSpawnInterval = 25000;
       const heartVisibleDuration = 5000;
       let snake = [];
+      let snakeTwo = [];
       let direction = { x: 1, y: 0 };
       let nextDirection = { x: 1, y: 0 };
+      let directionTwo = { x: 0, y: 1 };
+      let nextDirectionTwo = { x: 0, y: 1 };
       let food = { x: 0, y: 0 };
       let walls = [];
       let score = 0;
+      let scoreTwo = 0;
       let level = 1;
       let lives = 3;
       let running = false;
@@ -462,10 +506,18 @@
           { x: 9, y: 10 },
           { x: 8, y: 10 }
         ];
+        snakeTwo = playModeSelect.value === 'multiplayer' ? [
+          { x: 14, y: 14 },
+          { x: 15, y: 14 },
+          { x: 16, y: 14 }
+        ] : [];
         direction = { x: 1, y: 0 };
         nextDirection = { x: 1, y: 0 };
+        directionTwo = { x: 0, y: -1 };
+        nextDirectionTwo = { x: 0, y: -1 };
         walls = getWallsForModeAndDifficulty();
         score = 0;
+        scoreTwo = 0;
         level = 1;
         lives = 3;
         scoreEl.textContent = '0';
@@ -498,6 +550,7 @@
           };
         } while (
           snake.some((segment) => segment.x === position.x && segment.y === position.y) ||
+          snakeTwo.some((segment) => segment.x === position.x && segment.y === position.y) ||
           walls.some((wall) => wall.x === position.x && wall.y === position.y)
         );
 
@@ -553,6 +606,13 @@
           ctx.fillStyle = index === 0 ? '#22c55e' : '#4ade80';
           ctx.fillRect(segment.x * tileSize, segment.y * tileSize, tileSize - 1, tileSize - 1);
         });
+
+        if (snakeTwo.length > 0) {
+          snakeTwo.forEach((segment, index) => {
+            ctx.fillStyle = index === 0 ? '#f59e0b' : '#fbbf24';
+            ctx.fillRect(segment.x * tileSize, segment.y * tileSize, tileSize - 1, tileSize - 1);
+          });
+        }
       }
 
       function drawFood() {
@@ -633,6 +693,8 @@
 
         updateHeart();
 
+        const isMultiplayer = playModeSelect.value === 'multiplayer';
+
         direction = nextDirection;
         const head = { ...snake[0] };
         head.x += direction.x;
@@ -702,6 +764,55 @@
         } else {
           snake.pop();
         }
+
+        if (isMultiplayer && snakeTwo.length > 0) {
+          directionTwo = nextDirectionTwo;
+          const headTwo = { ...snakeTwo[0] };
+          headTwo.x += directionTwo.x;
+          headTwo.y += directionTwo.y;
+
+          const wrappedHeadTwo = { ...headTwo };
+          if (wrappedHeadTwo.x < 0) {
+            wrappedHeadTwo.x = boardSize - 1;
+          } else if (wrappedHeadTwo.x >= boardSize) {
+            wrappedHeadTwo.x = 0;
+          }
+
+          if (wrappedHeadTwo.y < 0) {
+            wrappedHeadTwo.y = boardSize - 1;
+          } else if (wrappedHeadTwo.y >= boardSize) {
+            wrappedHeadTwo.y = 0;
+          }
+
+          const isEatingTwo = wrappedHeadTwo.x === food.x && wrappedHeadTwo.y === food.y;
+          const collisionCheckTwo = isEatingTwo ? snakeTwo : snakeTwo.slice(0, -1);
+          const collisionDetectedTwo =
+            walls.some((wall) => wall.x === wrappedHeadTwo.x && wall.y === wrappedHeadTwo.y) ||
+            collisionCheckTwo.some((segment) => segment.x === wrappedHeadTwo.x && segment.y === wrappedHeadTwo.y) ||
+            snake.some((segment) => segment.x === wrappedHeadTwo.x && segment.y === wrappedHeadTwo.y);
+
+          if (collisionDetectedTwo) {
+            scoreTwo += 1;
+            snakeTwo = [
+              { x: 14, y: 14 },
+              { x: 15, y: 14 },
+              { x: 16, y: 14 }
+            ];
+            directionTwo = { x: 0, y: -1 };
+            nextDirectionTwo = { x: 0, y: -1 };
+            placeFood();
+            return;
+          }
+
+          snakeTwo.unshift(wrappedHeadTwo);
+
+          if (isEatingTwo) {
+            scoreTwo += 1;
+            placeFood();
+          } else {
+            snakeTwo.pop();
+          }
+        }
       }
 
       function render() {
@@ -725,6 +836,13 @@
         nextDirection = { x, y };
       }
 
+      function setDirectionTwo(x, y) {
+        if (x === -directionTwo.x && y === -directionTwo.y) {
+          return;
+        }
+        nextDirectionTwo = { x, y };
+      }
+
       document.addEventListener('keydown', (event) => {
         if (event.code === 'Space') {
           event.preventDefault();
@@ -741,6 +859,50 @@
         if (!gameStarted && event.key === 'Enter') {
           event.preventDefault();
           resetGame();
+          return;
+        }
+
+        if (playModeSelect.value === 'multiplayer') {
+          switch (event.key) {
+            case 'ArrowUp':
+              event.preventDefault();
+              setDirection(0, -1);
+              break;
+            case 'ArrowDown':
+              event.preventDefault();
+              setDirection(0, 1);
+              break;
+            case 'ArrowLeft':
+              event.preventDefault();
+              setDirection(-1, 0);
+              break;
+            case 'ArrowRight':
+              event.preventDefault();
+              setDirection(1, 0);
+              break;
+            case 'w':
+            case 'W':
+              event.preventDefault();
+              setDirectionTwo(0, -1);
+              break;
+            case 's':
+            case 'S':
+              event.preventDefault();
+              setDirectionTwo(0, 1);
+              break;
+            case 'a':
+            case 'A':
+              event.preventDefault();
+              setDirectionTwo(-1, 0);
+              break;
+            case 'd':
+            case 'D':
+              event.preventDefault();
+              setDirectionTwo(1, 0);
+              break;
+            default:
+              break;
+          }
           return;
         }
 
@@ -790,6 +952,12 @@
       });
 
       difficultySelect.addEventListener('change', () => {
+        if (gameStarted) {
+          resetGame();
+        }
+      });
+
+      playModeSelect.addEventListener('change', () => {
         if (gameStarted) {
           resetGame();
         }
